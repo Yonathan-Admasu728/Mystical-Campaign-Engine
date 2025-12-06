@@ -85,3 +85,5 @@ export const useCampaign = () => {
   }
   return context;
 };
+
+export default CampaignContext;

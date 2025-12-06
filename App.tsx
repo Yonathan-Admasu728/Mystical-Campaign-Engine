@@ -9,6 +9,7 @@ import { BrandVoiceTrainer } from './components/BrandVoiceTrainer';
 // Tier 3 & 4 Components
 import { ProactiveWhispers } from './components/ProactiveWhispers';
 import { CompetitorScanner } from './components/CompetitorScanner';
+import { TrendHijacker } from './components/TrendHijacker';
 import { VoiceNarrationControls, VoiceNarrationMini } from './components/VoiceNarrationControls';
 import { PublishingHub } from './components/PublishingHub';
 import { FeedbackDashboard } from './components/FeedbackDashboard';
@@ -19,7 +20,7 @@ import { CampaignProvider, useCampaign } from './context';
 import { CampaignBrief } from './types';
 import { DEFAULT_BRIEF } from './constants';
 
-type ViewMode = 'dashboard' | 'brief' | 'blueprint' | 'library' | 'templates' | 'voice' | 'compete' | 'publish' | 'feedback';
+type ViewMode = 'dashboard' | 'brief' | 'blueprint' | 'library' | 'templates' | 'voice' | 'compete' | 'trends' | 'publish' | 'feedback';
 
 // Oracle Eye SVG Component
 const OracleEye: React.FC<{ className?: string }> = ({ className }) => (
@@ -57,6 +58,7 @@ const NAV_ITEMS: { id: ViewMode; label: string; icon: string; section?: string }
   { id: 'templates', label: 'Templates', icon: '📐', section: 'assets' },
   { id: 'voice', label: 'Voice', icon: '🎤', section: 'assets' },
   { id: 'compete', label: 'Compete', icon: '🔍', section: 'intel' },
+  { id: 'trends', label: 'Trends', icon: '🎯', section: 'intel' },
   { id: 'publish', label: 'Publish', icon: '📤', section: 'scale' },
   { id: 'feedback', label: 'Feedback', icon: '📊', section: 'scale' },
 ];
@@ -300,6 +302,7 @@ const MainLayout: React.FC = () => {
                 {view === 'templates' && 'Templates'}
                 {view === 'voice' && 'Brand Voice'}
                 {view === 'compete' && 'Competitor Intel'}
+                {view === 'trends' && 'Trend Hijacker'}
                 {view === 'publish' && 'Publishing Hub'}
                 {view === 'feedback' && 'Performance Loop'}
               </p>
@@ -390,6 +393,17 @@ const MainLayout: React.FC = () => {
           {view === 'compete' && (
             <CompetitorScanner currentBrief={brief} />
           )}
+          
+          {view === 'trends' && (
+  <TrendHijacker 
+    onPopulateBrief={() => setView('brief')} 
+    onGenerateCampaign={() => {
+      setView('brief');
+      // Small delay to let brief populate, then trigger generation
+      setTimeout(() => handleGenerate(), 200);
+    }}
+  />
+)}
 
           {view === 'publish' && (
             <PublishingHub />

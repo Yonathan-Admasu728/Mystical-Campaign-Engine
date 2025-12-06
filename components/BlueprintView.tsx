@@ -7,6 +7,83 @@ import { toast } from 'sonner';
 import html2canvas from 'html2canvas';
 import { PlatformPreviewCarousel } from './PlatformPreviews';
 
+const constructFallbackPrompt = (
+  type: 'meme' | 'banner' | 'storyboard',
+  asset: any
+): string => {
+  switch (type) {
+    case 'meme':
+      return `Meme image for fitness brand: ${asset.angle || 'transformation'}. Visual showing ${asset.alt_text || 'before/after mindset shift'}. Style: relatable, slightly humorous, wellness aesthetic.`;
+    
+    case 'banner':
+      return `Professional fitness banner: ${asset.headline || 'EcoGym'}. ${asset.layout_description || 'Modern clean design'}. Dark moody aesthetic, gold accents, premium wellness brand. Space for text overlay.`;
+    
+    case 'storyboard':
+      const title = typeof asset.title === 'string' && asset.title.length < 100 
+        ? asset.title 
+        : 'Fitness transformation moment';
+      return `Cinematic storyboard frame for fitness video: ${title}. Real person in motion, natural lighting, athletic wear. Film photography style. NOT a product mockup.`;
+    
+    default:
+      return 'Professional fitness lifestyle image, wellness aesthetic, golden hour lighting.';
+  }
+};
+
+
+// Helper: Parse script beats from malformed title content
+const parseScriptFromTitle = (title: string): { voiceover_text: string; visual_direction: string; approx_seconds: string; on_screen_text: string }[] => {
+  if (!title || title.length < 100) return []; // Too short to be a full script dump
+  
+  const beats: { voiceover_text: string; visual_direction: string; approx_seconds: string; on_screen_text: string }[] = [];
+  
+  // Try to parse markdown-style beats like **0:00-0:05**: [Visual: ...] Voiceover: '...'
+  const beatPattern = /\*\*(\d+:\d+-\d+:\d+)\*\*:\s*\[Visual:\s*([^\]]+)\]\s*(?:Voiceover:\s*['"]([^'"]+)['"])?/gi;
+  let match;
+  
+  while ((match = beatPattern.exec(title)) !== null) {
+    beats.push({
+      approx_seconds: match[1] || '',
+      visual_direction: match[2]?.trim() || '',
+      voiceover_text: match[3]?.trim() || '',
+      on_screen_text: ''
+    });
+  }
+  
+  // If no matches, try simpler pattern
+  if (beats.length === 0) {
+    const simplePattern = /['"]([^'"]{20,})['"]/g;
+    let simpleMatch;
+    let idx = 0;
+    while ((simpleMatch = simplePattern.exec(title)) !== null && idx < 6) {
+      beats.push({
+        approx_seconds: `${idx * 5}s`,
+        visual_direction: '',
+        voiceover_text: simpleMatch[1].trim(),
+        on_screen_text: ''
+      });
+      idx++;
+    }
+  }
+  
+  return beats;
+};
+
+// Helper: Extract clean title from content dump
+const extractTitleFromContent = (content: string): string => {
+  if (!content) return '';
+  // If content is short, it's probably a real title
+  if (content.length < 100) return content;
+  
+  // Try to extract title before first colon or newline
+  const firstLine = content.split(/[\n:]/)[0];
+  if (firstLine && firstLine.length < 100) {
+    return firstLine.replace(/^The\s+/i, '').trim();
+  }
+  
+  // Fallback: take first 50 chars
+  return content.slice(0, 50).trim() + '...';
+};
+
 export const BlueprintView: React.FC = () => {
   const { blueprint, assets, setAssetUrl, setAssetLoading } = useCampaign();
   const { generatedAssets, loadingAssets } = assets;
@@ -389,7 +466,12 @@ export const BlueprintView: React.FC = () => {
 
                 <div className="flex gap-2">
                   <button
-                    onClick={() => handleGenerateAsset(banner.id, banner.image_prompt, 'image', banner.recommended_aspect_ratios?.[0] || '16:9')}
+                    onClick={() => {
+  // Construct fallback prompt if image_prompt is empty
+  const prompt = banner.image_prompt || 
+    `Professional fitness marketing banner: ${banner.headline || 'EcoGym'}. ${banner.layout_description || 'Clean modern design'}. Style: ${banner.subheadline ? 'featuring text overlay' : 'minimalist'}. High-end wellness brand aesthetic, dark moody lighting, gold accents.`;
+  handleGenerateAsset(banner.id, prompt, 'image', '1:1');
+}}
                     className="flex-1 py-3 bg-void-800 border border-white/10 text-slate-300 hover:border-cyan-500/30 hover:text-cyan-400 rounded-xl font-bold transition-all"
                   >
                     {generatedAssets[banner.id] ? "Redesign" : "Generate Design"}
@@ -513,81 +595,139 @@ export const BlueprintView: React.FC = () => {
         </section>
       )}
 
-      {/* 5. Video Storyboards */}
-      {videos.length > 0 && (
-        <section className="space-y-6">
-          <div className="flex items-center gap-4 px-2">
-            <span className="p-2.5 bg-rose-500/20 rounded-xl text-rose-400 text-xl">🎬</span>
-            <h3 className="text-2xl font-bold text-slate-200 tracking-tight">Director's Storyboards</h3>
-          </div>
+    {/* 4. Video Storyboards */}
+{videos.length > 0 && (
+  <section className="space-y-6">
+    <div className="flex items-center gap-4 px-2">
+      <span className="p-2.5 bg-rose-500/20 rounded-xl text-rose-400 text-xl">🎬</span>
+      <h3 className="text-2xl font-bold text-slate-200 tracking-tight">Director's Storyboards</h3>
+    </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {videos.map((video) => (
-              <div key={video.id || Math.random()} className="glass-panel p-6 rounded-2xl flex flex-col lg:flex-row gap-6">
-                
-                <div className="flex-1 order-2 lg:order-1">
-                  <div className="mb-5">
-                    <h4 className="font-bold text-xl text-slate-200 leading-none mb-2">{video.title}</h4>
-                    <div className="flex gap-2">
-                      <span className="text-xs font-bold text-rose-400 bg-rose-500/10 px-2 py-1 rounded">{video.max_duration_seconds}s</span>
-                      <span className="text-xs font-bold text-slate-500 bg-void-800 px-2 py-1 rounded uppercase">{(video.platform_targets || []).join(', ')}</span>
-                    </div>
-                  </div>
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      {videos.map((video) => {
+        // Parse script beats from title if script_beats is empty (handles malformed responses)
+        const hasProperBeats = video.script_beats && video.script_beats.length > 0;
+        const parsedBeats = hasProperBeats ? video.script_beats : parseScriptFromTitle(video.title);
+        const cleanTitle = hasProperBeats ? video.title : extractTitleFromContent(video.title);
+        
+        return (
+          <div key={video.id || Math.random()} className="glass-panel p-6 rounded-2xl flex flex-col lg:flex-row gap-6">
+            
+            {/* Script Content - Left Side */}
+            <div className="flex-1 order-2 lg:order-1 flex flex-col">
+              <div className="mb-4">
+                <h4 className="font-bold text-lg text-slate-200 leading-tight mb-2 line-clamp-2">
+                  {cleanTitle || 'Video Concept'}
+                </h4>
+                <div className="flex gap-2 flex-wrap">
+                  <span className="text-xs font-bold text-rose-400 bg-rose-500/10 px-2 py-1 rounded">
+                    {video.max_duration_seconds || 30}s
+                  </span>
+                  {(video.platform_targets || []).map((platform, idx) => (
+                    <span key={idx} className="text-xs font-bold text-slate-500 bg-void-800 px-2 py-1 rounded uppercase">
+                      {platform}
+                    </span>
+                  ))}
+                </div>
+              </div>
 
-                  <div className="space-y-0 relative border-l border-white/10 ml-2 pl-5 py-2">
-                    {(video.script_beats || []).map((beat, idx) => (
-                      <div key={idx} className="relative mb-5 last:mb-0">
-                        <span className="absolute -left-[23px] top-0 w-2 h-2 rounded-full bg-slate-600 ring-4 ring-void-900"></span>
-                        <span className="text-[10px] font-mono font-bold text-rose-400 block mb-1">{beat.approx_seconds}s</span>
-                        <p className="font-medium text-slate-300 text-sm leading-snug">"{beat.voiceover_text}"</p>
-                        <p className="text-xs text-slate-600 italic mt-1">{beat.visual_direction}</p>
+              {/* Scrollable Script Beats Container */}
+              <div className="flex-1 max-h-80 overflow-y-auto pr-2 custom-scrollbar">
+                {parsedBeats.length > 0 ? (
+                  <div className="space-y-0 relative border-l-2 border-rose-500/20 ml-2 pl-5 py-2">
+                    {parsedBeats.map((beat, idx) => (
+                      <div key={idx} className="relative mb-5 last:mb-0 group">
+                        <span className="absolute -left-[25px] top-1 w-3 h-3 rounded-full bg-rose-500/30 ring-4 ring-void-900 group-hover:bg-rose-500 transition-colors"></span>
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-[10px] font-mono font-bold text-rose-400 bg-rose-500/10 px-1.5 py-0.5 rounded">
+                            {beat.approx_seconds || `${idx * 5}-${(idx + 1) * 5}`}s
+                          </span>
+                          {beat.on_screen_text && (
+                            <span className="text-[9px] text-slate-600 uppercase">+ Text Overlay</span>
+                          )}
+                        </div>
+                        <p className="font-medium text-slate-300 text-sm leading-snug mb-1">
+                          "{beat.voiceover_text}"
+                        </p>
+                        {beat.visual_direction && (
+                          <p className="text-xs text-slate-600 italic leading-snug">
+                            📹 {beat.visual_direction}
+                          </p>
+                        )}
+                        {beat.on_screen_text && (
+                          <p className="text-xs text-amber-500/70 mt-1">
+                            💬 "{beat.on_screen_text}"
+                          </p>
+                        )}
                       </div>
                     ))}
                   </div>
-                </div>
-
-                <div className="w-full lg:w-56 order-1 lg:order-2 flex flex-col gap-4">
-                  <div 
-                    ref={(el) => { storyboardRefs.current[video.id] = el; }}
-                    className="relative w-full aspect-[9/16] bg-void-950 rounded-2xl overflow-hidden border border-white/5"
-                  >
-                    {generatedAssets[video.id] ? (
-                      <>
-                        <img src={generatedAssets[video.id]} alt="Storyboard Frame" crossOrigin="anonymous" className="w-full h-full object-cover" />
-                        <div className="absolute top-2 left-2 bg-black/60 text-white text-[10px] font-bold px-3 py-1 rounded-full backdrop-blur">Concept</div>
-                      </>
-                    ) : loadingAssets[video.id] ? (
-                      <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-600 animate-pulse">
-                        <div className="w-8 h-8 border-2 border-rose-500/30 border-t-rose-500 rounded-full animate-spin mb-2"></div>
-                        <p className="text-xs font-bold uppercase tracking-widest">Sketching...</p>
-                      </div>
-                    ) : (
-                      <div className="absolute inset-0 flex flex-col items-center justify-center p-5 text-center">
-                        <span className="text-3xl mb-3">✏️</span>
-                        <button
-                          onClick={() => handleGenerateAsset(video.id, video.storyboard_prompt, 'storyboard', '9:16')}
-                          className="w-full py-2.5 bg-rose-500 hover:bg-rose-400 text-white rounded-xl font-bold transition-colors text-sm"
-                        >
-                          Draw Storyboard
-                        </button>
-                      </div>
-                    )}
+                ) : (
+                  /* Fallback: Show raw content in scrollable container */
+                  <div className="text-slate-400 text-sm leading-relaxed whitespace-pre-wrap">
+                    {video.title}
                   </div>
-                  
-                  {generatedAssets[video.id] && (
-                    <button 
-                      onClick={() => handleDownloadComposite(video.id, 'storyboard')}
-                      className="w-full py-2 bg-void-800 border border-white/10 text-slate-500 text-xs font-bold rounded-lg hover:border-rose-500/30 hover:text-rose-400 transition-colors"
-                    >
-                      Download Frame
-                    </button>
-                  )}
-                </div>
+                )}
               </div>
-            ))}
+
+              {/* Storyboard Prompt Preview */}
+              {video.storyboard_prompt && (
+                <div className="mt-4 pt-4 border-t border-white/5">
+                  <span className="text-[9px] font-bold text-slate-600 uppercase block mb-1">Storyboard Prompt</span>
+                  <p className="text-xs text-slate-500 line-clamp-2">{video.storyboard_prompt}</p>
+                </div>
+              )}
+            </div>
+
+            {/* Storyboard Image - Right Side */}
+            <div className="w-full lg:w-48 order-1 lg:order-2 flex flex-col gap-3">
+              <div 
+                ref={(el) => { storyboardRefs.current[video.id] = el; }}
+                className="relative w-full aspect-[9/16] bg-void-950 rounded-2xl overflow-hidden border border-white/5"
+              >
+                {generatedAssets[video.id] ? (
+                  <>
+                    <img src={generatedAssets[video.id]} alt="Storyboard Frame" crossOrigin="anonymous" className="w-full h-full object-cover" />
+                    <div className="absolute top-2 left-2 bg-black/60 text-white text-[10px] font-bold px-3 py-1 rounded-full backdrop-blur">Concept</div>
+                  </>
+                ) : loadingAssets[video.id] ? (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-600 animate-pulse">
+                    <div className="w-8 h-8 border-2 border-rose-500/30 border-t-rose-500 rounded-full animate-spin mb-2"></div>
+                    <p className="text-xs font-bold uppercase tracking-widest">Sketching...</p>
+                  </div>
+                ) : (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center p-4 text-center">
+                    <span className="text-3xl mb-3">✏️</span>
+                    <button
+                      onClick={() => {
+  // Ensure we generate a SCENE storyboard, not a product mockup
+  const basePrompt = video.storyboard_prompt || cleanTitle;
+  const scenePrompt = `Cinematic storyboard frame for a fitness video: ${basePrompt}. Style: Film photography, real human subject, natural movement, wellness aesthetic. NOT a product mockup. NOT a logo. Show a PERSON in ACTION.`;
+  handleGenerateAsset(video.id, scenePrompt, 'storyboard', '9:16');
+}}
+                      className="w-full py-2 bg-rose-500 hover:bg-rose-400 text-white rounded-xl font-bold transition-colors text-sm"
+                    >
+                      Draw Storyboard
+                    </button>
+                  </div>
+                )}
+              </div>
+              
+              {generatedAssets[video.id] && (
+                <button 
+                  onClick={() => handleDownloadComposite(video.id, 'storyboard')}
+                  className="w-full py-2 bg-void-800 border border-white/10 text-slate-500 text-xs font-bold rounded-lg hover:border-rose-500/30 hover:text-rose-400 transition-colors"
+                >
+                  Download Frame
+                </button>
+              )}
+            </div>
           </div>
-        </section>
-      )}
+        );
+      })}
+    </div>
+  </section>
+)}
 
       {/* 6. UGC Scripts */}
       {scripts.length > 0 && (
