@@ -1,4 +1,13 @@
 import React, { useState } from 'react';
+import {
+  TrendingTopic,
+  TrendingTopicsCache,
+  getCachedTrendingTopics,
+  getTrendingTopics,
+  getLifespanStatus,
+  initializeTrendingTopics,
+  DEFAULT_TRENDS
+} from '../services/trendingTopicsService';
 import { 
   analyzeTrend, 
   TrendAnalysis, 
@@ -49,6 +58,8 @@ const PhoneMockup: React.FC<{ platform: string; children: React.ReactNode }> = (
     Twitter: 'from-blue-400 to-blue-500',
     LinkedIn: 'from-blue-600 to-blue-700'
   };
+
+  
   
   return (
     <div className="relative mx-auto" style={{ width: '140px' }}>
@@ -186,6 +197,15 @@ export const TrendHijacker: React.FC<Props> = ({ onPopulateBrief, onGenerateCamp
     loadFromPersistence(STORAGE_KEYS.savedAnalyses, [])
   );
 
+  const [trendingCache, setTrendingCache] = useState<TrendingTopicsCache | null>(() => 
+  initializeTrendingTopics()
+);
+const [isRefreshingTrends, setIsRefreshingTrends] = useState(false);
+
+// DERIVED VALUES:
+const lifespanStatus = getLifespanStatus(trendingCache);
+const quickTrends = trendingCache?.topics || DEFAULT_TRENDS;
+
   // Persist analysis when it changes
   React.useEffect(() => {
     if (analysis) {
@@ -261,6 +281,19 @@ export const TrendHijacker: React.FC<Props> = ({ onPopulateBrief, onGenerateCamp
     setSavedAnalyses(prev => prev.filter((_, i) => i !== index));
     toast.success('Removed from saved');
   };
+
+  const handleRefreshTrends = async () => {
+  setIsRefreshingTrends(true);
+  try {
+    const freshCache = await getTrendingTopics(true); // force refresh
+    setTrendingCache(freshCache);
+    toast.success('Trending topics refreshed');
+  } catch (error) {
+    toast.error('Failed to refresh trends');
+  } finally {
+    setIsRefreshingTrends(false);
+  }
+};
 
   const handlePopulateBrief = (briefIndex: number) => {
     if (!analysis) return;
@@ -373,20 +406,7 @@ HASHTAGS: ${contentBrief.hashtags.join(' ')}`,
     }, 100);
   };
 
-  const quickTrends = [
-    'Brown noise sleep',
-    '5am club',
-    'Touch grass',
-    'Main character energy',
-    'Roman Empire thoughts',
-    'Very demure very mindful',
-    'Seasonal depression',
-    'Soft life era',
-    'That girl aesthetic',
-    'Hot girl walk',
-    'Bed rotting',
-    'Girl dinner'
-  ];
+
 
   return (
     <div className="space-y-6">
@@ -463,18 +483,77 @@ HASHTAGS: ${contentBrief.hashtags.join(' ')}`,
           />
         </div>
 
-        {/* Quick Trends */}
-        <div className="flex flex-wrap gap-2">
-          {quickTrends.map(trend => (
-            <button
-              key={trend}
-              onClick={() => setTrendInput(trend)}
-              className="px-3 py-1.5 text-xs font-medium bg-void-700/50 text-slate-400 rounded-lg border border-white/5 hover:border-gold-500/30 hover:text-gold-400 transition-all"
-            >
-              {trend}
-            </button>
-          ))}
-        </div>
+        {/* Quick Trends with Refresh */}
+<div className="space-y-3">
+  {/* Header with Lifespan Badge and Refresh */}
+  <div className="flex items-center justify-between">
+    <div className="flex items-center gap-3">
+      <span className="text-[10px] font-bold text-slate-600 uppercase tracking-widest">
+        Quick Pick Trends
+      </span>
+      {/* Lifespan Badge */}
+      <span className={`px-2 py-0.5 text-[10px] font-medium rounded-full ${lifespanStatus.bgColor} ${lifespanStatus.color}`}>
+        {lifespanStatus.label}
+      </span>
+    </div>
+    
+    {/* Refresh Button */}
+    <button
+      onClick={handleRefreshTrends}
+      disabled={isRefreshingTrends}
+      className={`
+        flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-lg
+        transition-all border
+        ${lifespanStatus.shouldRefresh 
+          ? 'bg-gold-500/10 border-gold-500/30 text-gold-400 hover:bg-gold-500/20' 
+          : 'bg-void-700/50 border-white/5 text-slate-500 hover:text-slate-400 hover:border-white/10'
+        }
+        ${isRefreshingTrends ? 'cursor-wait opacity-70' : ''}
+      `}
+      title={lifespanStatus.shouldRefresh ? 'Refresh recommended' : 'Trends are fresh'}
+    >
+      <span className={isRefreshingTrends ? 'animate-spin' : ''}>
+        {isRefreshingTrends ? '◈' : '🔄'}
+      </span>
+      {isRefreshingTrends ? 'Refreshing...' : 'Refresh'}
+    </button>
+  </div>
+
+  {/* Trend Buttons */}
+  <div className="flex flex-wrap gap-2">
+    {quickTrends.map((trend) => (
+      <button
+        key={trend.name}
+        onClick={() => setTrendInput(trend.name)}
+        className={`
+          px-3 py-1.5 text-xs font-medium rounded-lg border transition-all
+          ${trendInput === trend.name 
+            ? 'bg-gold-500/20 border-gold-500/30 text-gold-400' 
+            : 'bg-void-700/50 border-white/5 text-slate-400 hover:border-gold-500/30 hover:text-gold-400'
+          }
+        `}
+        title={`${trend.category} • ${trend.bridgePotential} bridge potential`}
+      >
+        {/* Category indicator dot */}
+        <span className={`
+          inline-block w-1.5 h-1.5 rounded-full mr-2
+          ${trend.bridgePotential === 'high' ? 'bg-emerald-400' : 
+            trend.bridgePotential === 'medium' ? 'bg-amber-400' : 'bg-slate-500'}
+        `} />
+        {trend.name}
+      </button>
+    ))}
+  </div>
+  
+  {/* Refresh hint when stale */}
+  {lifespanStatus.shouldRefresh && (
+    <p className="text-[10px] text-amber-400/60 flex items-center gap-1">
+      <span>💡</span>
+      Consider refreshing to catch current viral waves
+    </p>
+  )}
+</div>
+
 
         <div>
           <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">
